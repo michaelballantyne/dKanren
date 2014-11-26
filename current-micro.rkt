@@ -1,5 +1,5 @@
 #lang racket
-(provide == call/fresh conj disj define-goal-constructor call/initial-state ifte once)
+(provide == call/fresh conj disj define-goal-constructor call/initial-state ifte once unify)
 ;; just some racketry.
 ;; In general, comments are below their corresponding definitions.
 (define (var n) n)
@@ -92,33 +92,33 @@
         ((null? $) `())
         (else (list (car $)))))))
 ;; Yeah, yeah. Sure. I guess these go in too.
-;; I'm giving an askance look to (list (car $)) atm. 
-(define-goal-constructor (appendo l s out)
-  (disj
-   (conj (== '() l) (== s out))
-   (call/fresh
-    (lambda (a)
-      (call/fresh
-       (lambda (d)
-         (conj
-          (== `(,a . ,d) l)
-          (call/fresh
-           (lambda (res)
-             (conj
-              (== `(,a . ,res) out)
-              (appendo d s res)))))))))))
+;; I'm giving an askance look to (list (car $)) atm.
+;(define-goal-constructor (appendo l s out)
+;  (disj
+;   (conj (== '() l) (== s out))
+;   (call/fresh
+;    (lambda (a)
+;      (call/fresh
+;       (lambda (d)
+;         (conj
+;          (== `(,a . ,d) l)
+;          (call/fresh
+;           (lambda (res)
+;             (conj
+;              (== `(,a . ,res) out)
+;              (appendo d s res)))))))))))
 ;; ;; Ye olde appendo.
-((cdr (call/initial-state
-  (call/fresh
-   (lambda (q)
-     (call/fresh
-      (lambda (l)
-        (call/fresh
-         (lambda (s)
-           (call/fresh
-            (lambda (out)
-              (conj
-               (appendo l s out)
-               (== `(,l ,s ,out) q)))))))))))))
+;((cdr (call/initial-state
+;  (call/fresh
+;   (lambda (q)
+;     (call/fresh
+;      (lambda (l)
+;        (call/fresh
+;         (lambda (s)
+;           (call/fresh
+;            (lambda (out)
+;              (conj
+;               (appendo l s out)
+;               (== `(,l ,s ,out) q)))))))))))))
 ;; ... and the pitch
 
