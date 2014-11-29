@@ -17,33 +17,84 @@
   '())
 
 (struct state (unreduced reduced) #:transparent)
-(struct conj (substitution children) #:transparent)
+(struct conj (substitution unsorted disjunctions procs) #:transparent)
 (struct disj (children) #:transparent)
 (struct unification (left right) #:transparent)
 (struct proc (name p) #:transparent)
 
-; TODO: Use list-no-order for all clauses and combine the two clauses for disj
-(define (reduce-disjunct substitution children)
-  (match children
-    ; Apply a unification
-    [(list-no-order (unification left right) other-children ...)
-     (let ([new-substitution (unify left right substitution)])
-       (cond
-         [(not new-substitution) (values #f '())]
-         [(null? other-children) (values new-substitution '())]
-         [else (values #f (list (conj new-substitution other-children)))]))]
-    ; Lift branches of any nested conjunct
-    [(list-no-order (conj #f nested-children) other-children ...)
-     (values #f (list (conj substitution (append other-children
-                                                 nested-children))))]
+(define (tree-append t1 t2)
+  (if (null? t1)
+    t2
+    (cons t1 t2)))
+
+(define (tree-first tree)
+  (if (pair? (first tree))
+    (tree-first (first tree))
+    (first tree)))
+
+(define (tree-rest tree)
+  (if (pair? (first tree))
+    (let ([rest-subtree (tree-rest (first tree))])
+      (if (null? rest-subtree)
+        (rest tree)
+        (cons rest-subtree (rest tree))))
+    (rest tree)))
+
+(define (update-conj node
+                     #:substitution [sbst (conj-substitution node)]
+                     #:unsorted [all-t (conj-unsorted node)]
+                     #:disjunctions [disj-t (conj-disjunctions node)]
+                     #:procs [proc-t (conj-procs node)])
+  (conj sbst all-t disj-t proc-t))
+
+(define (inc disjunct)
+  (values #f (list disjunct)))
+
+(define (reduce-disjunct disjunct)
+  (match-define (conj substitution unsorted disjunctions procs) disjunct)
+  (cond
+    [(pair? unsorted)
+     (match (tree-first unsorted)
+       ; Apply a unification
+       [(unification term1 term2)
+        (let ([new-substitution (unify term1 term2 substitution)])
+          (cond
+            [(not new-substitution)
+             (values #f '())]
+            [(and (null? (tree-rest unsorted))
+                  (null? disjunctions)
+                  (null? procs))
+             (values new-substitution '())]
+            [else
+              (inc (update-conj disjunct
+                     #:substitution new-substitution
+                     #:unsorted (tree-rest unsorted)))]))]
+       ; Lift branches of a nested conjunct
+       [(conj #f nested-unsorted '() '())
+        (inc (update-conj disjunct
+               #:unsorted (tree-append (tree-rest unsorted) nested-unsorted)))]
+       ; Move a disjunct to its delayed list
+       [(and disj-node (? disj?))
+        (inc (update-conj disjunct
+               #:unsorted (tree-rest unsorted)
+               #:disjunctions (tree-append disj-node disjunctions)))]
+       ; Move a proc to its delayed list
+       [(and proc-node (? proc?))
+        (inc (update-conj disjunct
+               #:unsorted (tree-rest unsorted)
+               #:procs (tree-append procs (list proc-node))))])]
     ; If we have a disjunction, distribute the remaining children into it. They won't
     ; be unifications or conjunctions because of the previous cases.
-    [(list-no-order (disj disj-children) other-children ...)
-     (values #f (map (match-lambda
-                       [(conj #f nested-children)
-                        (conj substitution (append other-children
-                                                   nested-children))])
-                     disj-children))]))
+    [(pair? disjunctions)
+     (values
+       #f
+       (map (match-lambda
+              [(conj #f nested-unsorted nested-disjunctions nested-procs)
+               (conj substitution
+                     nested-unsorted
+                     (tree-append nested-disjunctions (tree-rest disjunctions))
+                     (tree-append nested-procs procs))])
+            (disj-children (tree-first disjunctions))))]))
 
 (define (step-state current-state)
   (match-define
@@ -56,21 +107,21 @@
     [(q:empty? unreduced-q)
      (define expanded-disjunct
        (match (q:head reduced-q)
-         [(conj substitution (cons (proc name p) other-procs))
-          (conj substitution (cons (p) other-procs))]))
+         [(conj substitution '() '() procs)
+          (conj substitution (list ((proc-p (tree-first procs)))) '() (tree-rest procs))]))
      (values #f (state (q:enqueue expanded-disjunct unreduced-q)
                        (q:tail reduced-q)))]
     ; Else, look at the first element in the unreduced-q
     [else
       (match (q:head unreduced-q)
         ; The element is fully reduced.
-        [(conj substitution (list (proc _ _) ...))
+        [(conj substitution '() '() _)
         (values #f (state (q:tail unreduced-q)
                           (q:enqueue (q:head unreduced-q) reduced-q)))]
         ; The element needs reducing.
-        [(conj substitution children)
+        [disjunct
          (define-values (result new-disjuncts)
-           (reduce-disjunct substitution children))
+           (reduce-disjunct disjunct))
          (values result (state (enqueue-all (q:tail unreduced-q) new-disjuncts)
                                reduced-q))])]))
 
@@ -78,21 +129,21 @@
   `(() () ,substitution () () () ()))
 
 (define (inject . conjuncts)
-  (state (q:queue (conj (empty-s) conjuncts)) (q:queue)))
+  (state (q:queue (conj (empty-s) conjuncts '() '())) (q:queue)))
 
 (define-syntax (fresh stx)
   (syntax-case stx ()
     [(_ (x* ...) g g* ...)
      #'(let ([x* (var (quote x*))] ...)
-         (conj #f (list g g* ...)))]))
+         (conj #f (list g g* ...) '() '()))]))
 
 (define-syntax (conde stx)
   (syntax-case stx ()
     [(_ [g1 g1* ...] [g g* ...] ...)
      #'(disj
          (list
-           (conj #f (list g1 g1* ...))
-           (conj #f (list g g* ...))
+           (conj #f (list g1 g1* ...) '() '())
+           (conj #f (list g g* ...) '() '())
            ...))]))
 
 (define (== a b)
@@ -113,8 +164,7 @@
   (if current-state (append (q:queue->list (state-unreduced current-state))
                     (q:queue->list (state-reduced current-state))) #f)
           )))
-;(if current-state (append (q:queue->list (state-unreduced current-state))
-;                    (q:queue->list (state-reduced current-state))) #f)
+
 (define-syntax (run stx)
   (syntax-case stx ()
     [(_ ne (x x* ...) g g* ...)
@@ -139,7 +189,6 @@
          (proc name (lambda ()
            body)))]))
 
-
 (define-goal (appendo l s out)
   (conde
     [(== '() l) (== s out)]
@@ -147,6 +196,22 @@
        (== `(,a . ,d) l)
        (== `(,a . ,res) out)
        (appendo d s res))]))
+
+(define (state-display s)
+  (state
+    (q:queue->list (state-unreduced s))
+    (q:queue->list (state-reduced s))))
+
+
+(define (show-step-internal n q [r '()])
+  (if (> n 0)
+    (let-values ([(result new-tree) (step-state q)])
+      (show-step-internal (- n 1) new-tree (cons result r)))
+    (values r (state-display q))))
+
+(define (show-step n tree)
+  (show-step-internal n (inject tree)))
+
 
 
 #|
@@ -194,28 +259,9 @@
 
 (run 10 (x y z) (appendo `(a . ,x) y `(a . ,z)))
 
+(run* (x y z) (appendo `(a . ,x) y `(b . ,z)))
+
 (time (length (run* (q) (fresh (x y) (appendo x y (make-list 1000 1)) (== (list x y) q)))))
-
-
-(define (show-step-internal n q [r '()])
-  (if (> n 0)
-    (let-values ([(result new-tree) (step-state q)])
-      (show-step-internal (- n 1) new-tree (cons result r)))
-    'a))
-
-(define (show-step n tree)
-  (show-step-internal n (state (q:queue (conj (empty-s) (list tree))) (q:queue))))
-
-(define (run-internal n state results)
-  (if (and state (> n 0))
-    (let-values ([(result new-state) (step-state state)])
-      (if result
-        (run-internal (- n 1) new-state (cons result results))
-        (run-internal n new-state results)))
-    results))
-
-(define (run n tree)
-  (run-internal n (state (q:queue (conj (empty-s) (list tree))) (q:queue)) '()))
 
 
 
