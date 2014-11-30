@@ -306,6 +306,12 @@
 
 #|
 
+(run 5 (b q r)
+                  (logo '(0 1) b q r))
+
+(run 6 (b q r)
+                  (logo '(0 1) b q r))
+
 (test-check "testc21.tex-26"
             (run 5 (b q r)
                   (logo '(0 1 1) b q r))
@@ -315,7 +321,7 @@
 
 
 (time (test-check "testc21.tex-27" 
-            (run 3 (s)
+            (run 2 (s)
                   (fresh (b q r)
                     (logo '(0 0 1 0 0 0 1) b q r)
                     (>1o q)
