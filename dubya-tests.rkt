@@ -248,15 +248,15 @@
   '())
 
 
-(test-check "bar-1"
-  (run 1 (q)
-    (bar 6))
-  '())
-
-(test-check "bar-2"
-  (run* (q)
-    (bar 6))
-  '())
+;(test-check "bar-1"
+;  (run 1 (q)
+;    (bar 6))
+;  '())
+;
+;(test-check "bar-2"
+;  (run* (q)
+;    (bar 6))
+;  '())
 
 
 (test-check "quux-1"
@@ -264,15 +264,15 @@
     (quux 6))
   '())
 
-(test-check "quuux-1"
-  (run* (q)
-    (quuux 6))
-  '())
+;(test-check "quuux-1"
+;  (run* (q)
+;    (quuux 6))
+;  '())
 
-(test-check "blat-1"
-  (run* (q)
-    (blat 6))
-  '())
+;(test-check "blat-1"
+;  (run* (q)
+;    (blat 6))
+;  '())
 
 
 (test-check "blaz-1"
