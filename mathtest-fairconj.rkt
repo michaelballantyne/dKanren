@@ -304,16 +304,20 @@
     ((0 1 1) (0 0 1) (0 0 0 1 1))
     ((1 1) (0 0 0 1) (0 0 0 1 1))))
 
+(time (run 9 (b q r)
+                  (logo '(0 1 1) b q r)))
+
 #|
+
+(time (run 5 (b q r)
+                  (logo '(0 1) b q r)))
 
 (run 5 (b q r)
                   (logo '(0 1) b q r))
 
-(run 6 (b q r)
-                  (logo '(0 1) b q r))
 
 (test-check "testc21.tex-26"
-            (run 5 (b q r)
+            (run 8 (b q r)
                   (logo '(0 1 1) b q r))
             (list `(0 1 1)))
 

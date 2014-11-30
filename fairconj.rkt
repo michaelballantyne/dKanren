@@ -1,14 +1,15 @@
 #lang racket
 
-(require (prefix-in q: pfds/deque/implicit))
+(require (prefix-in topq: pfds/deque/real-time))
+(require (prefix-in disjq: pfds/queue/real-time))
 (require (only-in "mk.rkt" unify var reify))
 
 (provide == run run* define-goal fresh conde appendo)
 
-(define (enqueue-all queue l)
+(define (topq:enqueue-all queue l)
   (if (null? l)
     queue
-    (enqueue-all (q:enqueue (car l) queue) (cdr l))))
+    (topq:enqueue-all (topq:enqueue (car l) queue) (cdr l))))
 
 (struct substitution (alist))
 
@@ -22,24 +23,24 @@
 
 
 (define (update-conj current-state
-                     #:substitution [substitution (conj-substitution (q:head current-state))]
-                     #:unsorted     [unsorted     (conj-unsorted     (q:head current-state))]
-                     #:disjunctions [disjunctions (conj-disjunctions (q:head current-state))])
-  (values #f (q:enqueue-front (conj substitution unsorted disjunctions)
-                              (q:tail current-state))))
+                     #:substitution [substitution (conj-substitution (topq:head current-state))]
+                     #:unsorted     [unsorted     (conj-unsorted     (topq:head current-state))]
+                     #:disjunctions [disjunctions (conj-disjunctions (topq:head current-state))])
+  (values #f (topq:enqueue-front (conj substitution unsorted disjunctions)
+                              (topq:tail current-state))))
 
 (define (step-state current-state)
-  (match-define (conj substitution unsorted disjunctions) (q:head current-state))
+  (match-define (conj substitution unsorted disjunctions) (topq:head current-state))
   (if (pair? unsorted)
     (match (first unsorted)
       [(unification term1 term2)
        (let ([new-substitution (unify term1 term2 substitution)])
          (cond
            [(not new-substitution)
-            (values #f (q:tail current-state))]
+            (values #f (topq:tail current-state))]
            [(and (null? (rest unsorted))
-                 (q:empty? disjunctions))
-            (values new-substitution (q:tail current-state))]
+                 (disjq:empty? disjunctions))
+            (values new-substitution (topq:tail current-state))]
            [else (update-conj current-state
                    #:substitution new-substitution
                    #:unsorted (rest unsorted))]))]
@@ -53,20 +54,20 @@
       [(and disj-node (? disj?))
        (update-conj current-state
          #:unsorted (rest unsorted)
-         #:disjunctions (q:enqueue disj-node disjunctions))])
+         #:disjunctions (disjq:enqueue disj-node disjunctions))])
     (values #f
-            (enqueue-all
-              (q:tail current-state)
+            (topq:enqueue-all
+              (topq:tail current-state)
               (map (match-lambda
                      [(conj #f nested-unsorted #f)
-                      (conj substitution nested-unsorted (q:tail disjunctions))])
-                   (disj-children (q:head disjunctions)))))))
+                      (conj substitution nested-unsorted (disjq:tail disjunctions))])
+                   (disj-children (disjq:head disjunctions)))))))
 
 (define (substitution->constraint-store substitution)
   `(() () ,substitution () () () ()))
 
 (define (inject . conjuncts)
-  (q:deque (conj (empty-s) conjuncts (q:deque))))
+  (topq:deque (conj (empty-s) conjuncts (disjq:queue))))
 
 (define-syntax (fresh stx)
   (syntax-case stx ()
@@ -87,7 +88,7 @@
   (unification a b))
 
 (define (run-internal n query-vars current-state acc)
-  (if (and (not (q:empty? current-state)) (or (false? n) (> n 0)))
+  (if (and (not (topq:empty? current-state)) (or (false? n) (> n 0)))
     (let-values ([(result new-state) (step-state current-state)])
       (if result
         (run-internal (and n (- n 1)) query-vars new-state (cons result acc))
@@ -132,7 +133,7 @@
        (appendo d s res))]))
 
 (define (state-display s)
-  (q:deque->list s))
+  (topq:deque->list s))
 
 (define (show-step-internal n q [r '()])
   (if (> n 0)
