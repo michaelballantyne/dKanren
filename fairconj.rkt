@@ -1,6 +1,6 @@
 #lang racket
 
-(require (prefix-in topq: pfds/deque/real-time))
+(require (prefix-in topq: pfds/queue/real-time))
 (require (prefix-in disjq: pfds/queue/real-time))
 (require (only-in "mk.rkt" unify var reify))
 
@@ -44,6 +44,25 @@
       [(and disj-node (? disj?))
        (reduce-conj substitution (rest unsorted) (disjq:enqueue disj-node disjunctions))])))
 
+(define (filter-branches disjunction substitution)
+  (define new-children
+    (filter-map (match-lambda
+                  [(conj #f children #f)
+                   (let-values ([(new-substitution new-disjunctions)
+                                 (reduce-conj substitution children (disjq:queue))])
+                     (if new-substitution
+                       (conj #f children #f)
+                       #f))])
+                (disj-children disjunction)))
+  (if (null? new-children)
+    #f
+    (disj new-children)))
+
+(define (filter-disjunctions q substitution)
+  (disjq:map
+    (lambda (disjunction)
+      (filter-branches disjunction substitution))
+    q))
 
 (define (step-state current-state)
   (define-values (substitution disjunctions)
@@ -53,19 +72,22 @@
   (if (or (not substitution) (disjq:empty? disjunctions))
     (values substitution (topq:tail current-state))
     (values #f
-            (topq:enqueue-all
-              (topq:tail current-state)
-              (map (match-lambda
-                     [(conj #f nested-unsorted #f)
-                      (conj substitution nested-unsorted (disjq:tail disjunctions))])
-                   (disj-children (disjq:head disjunctions)))))))
+            (let ([filtered-disjunctions (filter-disjunctions disjunctions substitution)])
+              (if (not (disjq:andmap (lambda (x) x) filtered-disjunctions))
+                (topq:tail current-state)
+                (topq:enqueue-all
+                  (topq:tail current-state)
+                  (map (match-lambda
+                         [(conj #f nested-unsorted #f)
+                          (conj substitution nested-unsorted (disjq:tail filtered-disjunctions))])
+                       (disj-children (disjq:head filtered-disjunctions)))))))))
 
 
 (define (substitution->constraint-store substitution)
   `(() () ,substitution () () () ()))
 
 (define (inject . conjuncts)
-  (topq:deque (conj (empty-s) conjuncts (disjq:queue))))
+  (topq:queue (conj (empty-s) conjuncts (disjq:queue))))
 
 (define-syntax (fresh stx)
   (syntax-case stx ()
@@ -131,7 +153,7 @@
        (appendo d s res))]))
 
 (define (state-display s)
-  (topq:deque->list s))
+  (topq:queue->list s))
 
 (define (show-step-internal n q [r '()])
   (if (> n 0)
