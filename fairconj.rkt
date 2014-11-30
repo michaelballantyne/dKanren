@@ -1,15 +1,17 @@
 #lang racket
 
-(require (prefix-in topq: pfds/deque/real-time))
+(require data/queue)
 (require (prefix-in disjq: pfds/queue/real-time))
 (require (only-in "mk.rkt" unify var reify))
 
 (provide == run run* define-goal fresh conde appendo)
 
-(define (topq:enqueue-all queue l)
+(define (enqueue-all! queue l)
   (if (null? l)
     queue
-    (topq:enqueue-all (topq:enqueue (car l) queue) (cdr l))))
+    (begin
+      (enqueue! queue (car l))
+      (enqueue-all! queue (cdr l)))))
 
 (struct substitution (alist))
 
@@ -22,42 +24,43 @@
 (struct proc (name p) #:transparent)
 
 
-(define (update-conj current-state
-                     #:substitution [substitution (conj-substitution (topq:head current-state))]
-                     #:unsorted     [unsorted     (conj-unsorted     (topq:head current-state))]
-                     #:disjunctions [disjunctions (conj-disjunctions (topq:head current-state))])
-  (values #f (topq:enqueue-front (conj substitution unsorted disjunctions)
-                              (topq:tail current-state))))
+(define (update-conj q-head current-state
+                     #:substitution [substitution (conj-substitution q-head)]
+                     #:unsorted     [unsorted     (conj-unsorted     q-head)]
+                     #:disjunctions [disjunctions (conj-disjunctions q-head)])
+  (enqueue-front! current-state (conj substitution unsorted disjunctions))
+  (values #f current-state))
 
 (define (step-state current-state)
-  (match-define (conj substitution unsorted disjunctions) (topq:head current-state))
+  (define q-head (dequeue! current-state))
+  (match-define (conj substitution unsorted disjunctions) q-head)
   (if (pair? unsorted)
     (match (first unsorted)
       [(unification term1 term2)
        (let ([new-substitution (unify term1 term2 substitution)])
          (cond
            [(not new-substitution)
-            (values #f (topq:tail current-state))]
+            (values #f current-state)]
            [(and (null? (rest unsorted))
                  (disjq:empty? disjunctions))
-            (values new-substitution (topq:tail current-state))]
-           [else (update-conj current-state
+            (values new-substitution current-state)]
+           [else (update-conj q-head current-state
                    #:substitution new-substitution
                    #:unsorted (rest unsorted))]))]
       [(conj #f nested-unsorted #f)
-       (update-conj current-state
+       (update-conj q-head current-state
          #:unsorted (append nested-unsorted
                             (rest unsorted)))]
       [(proc name p)
-       (update-conj current-state
+       (update-conj q-head current-state
          #:unsorted (cons (p) (rest unsorted)))]
       [(and disj-node (? disj?))
-       (update-conj current-state
+       (update-conj q-head current-state
          #:unsorted (rest unsorted)
          #:disjunctions (disjq:enqueue disj-node disjunctions))])
     (values #f
-            (topq:enqueue-all
-              (topq:tail current-state)
+            (enqueue-all!
+              current-state
               (map (match-lambda
                      [(conj #f nested-unsorted #f)
                       (conj substitution nested-unsorted (disjq:tail disjunctions))])
@@ -67,7 +70,9 @@
   `(() () ,substitution () () () ()))
 
 (define (inject . conjuncts)
-  (topq:deque (conj (empty-s) conjuncts (disjq:queue))))
+  (let ([q (make-queue)])
+    (enqueue! q (conj (empty-s) conjuncts (disjq:queue)))
+    q))
 
 (define-syntax (fresh stx)
   (syntax-case stx ()
@@ -88,7 +93,7 @@
   (unification a b))
 
 (define (run-internal n query-vars current-state acc)
-  (if (and (not (topq:empty? current-state)) (or (false? n) (> n 0)))
+  (if (and (non-empty-queue? current-state) (or (false? n) (> n 0)))
     (let-values ([(result new-state) (step-state current-state)])
       (if result
         (run-internal (and n (- n 1)) query-vars new-state (cons result acc))
@@ -132,6 +137,8 @@
        (== `(,a . ,res) out)
        (appendo d s res))]))
 
+#|
+
 (define (state-display s)
   (topq:deque->list s))
 
@@ -144,7 +151,6 @@
 (define (show-step n tree)
   (show-step-internal n (inject tree)))
 
-#|
 
 (run* (q) (== 'a 'b))
 
