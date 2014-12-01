@@ -6,13 +6,6 @@
 
 (provide == run run* define-goal fresh conde appendo)
 
-(define (topq:enqueue-all queue l)
-  (if (null? l)
-    queue
-    (topq:enqueue-all (topq:enqueue (car l) queue) (cdr l))))
-
-(struct substitution (alist))
-
 (define (empty-s)
   '())
 
@@ -20,6 +13,7 @@
 (struct disj (children) #:transparent)
 (struct unification (left right) #:transparent)
 (struct proc (name p) #:transparent)
+(struct state (unreduced reduced) #:transparent)
 
 (define (reduce-conj substitution unsorted disjunctions)
   (if (null? unsorted)
@@ -44,6 +38,38 @@
       [(and disj-node (? disj?))
        (reduce-conj substitution (rest unsorted) (disjq:enqueue disj-node disjunctions))])))
 
+(define (step-state current-state)
+  (match-define (state unreduced reduced) current-state)
+  (if (pair? unreduced)
+    (match-let ([(conj substitution unsorted disjunctions) (first unreduced)])
+      (let-values ([(new-substitution new-disjunctions)
+                    (reduce-conj substitution unsorted disjunctions)])
+        (if (or (not new-disjunctions) (disjq:empty? new-disjunctions))
+          (values new-substitution (state (rest unreduced) reduced))
+          (values #f
+                  (state (rest unreduced)
+                         (topq:enqueue (conj new-substitution '() new-disjunctions)
+                                         reduced))))))
+    (match-let ([(conj substitution '() disjunctions)
+                 (topq:head reduced)])
+      (values
+        #f
+        (state
+          (map
+            (match-lambda
+              [(conj #f nested-unsorted #f)
+               (conj substitution nested-unsorted (disjq:tail disjunctions))])
+            (disj-children (disjq:head disjunctions)))
+          (topq:tail reduced))))))
+
+
+
+
+(define (topq:enqueue-all queue l)
+  (if (null? l)
+    queue
+    (topq:enqueue-all (topq:enqueue (car l) queue) (cdr l))))
+
 (define (filter-branches disjunction substitution)
   (define new-children
     (filter-map (match-lambda
@@ -64,7 +90,9 @@
       (filter-branches disjunction substitution))
     q))
 
-(define (step-state current-state)
+
+
+(define (step-state2 current-state)
   (define-values (substitution disjunctions)
     (match (topq:head current-state)
       [(conj unreduced-substitution unreduced-unsorted unreduced-disjunctions)
@@ -87,7 +115,7 @@
   `(() () ,substitution () () () ()))
 
 (define (inject . conjuncts)
-  (topq:queue (conj (empty-s) conjuncts (disjq:queue))))
+  (state (list (conj (empty-s) conjuncts (disjq:queue))) (topq:queue)))
 
 (define-syntax (fresh stx)
   (syntax-case stx ()
@@ -108,7 +136,9 @@
   (unification a b))
 
 (define (run-internal n query-vars current-state acc)
-  (if (and (not (topq:empty? current-state)) (or (false? n) (> n 0)))
+  (if (and (or (pair? (state-unreduced current-state))
+               (not (topq:empty? (state-reduced current-state))))
+           (or (false? n) (> n 0)))
     (let-values ([(result new-state) (step-state current-state)])
       (if result
         (run-internal (and n (- n 1)) query-vars new-state (cons result acc))
@@ -153,7 +183,7 @@
        (appendo d s res))]))
 
 (define (state-display s)
-  (topq:queue->list s))
+  (list (state-unreduced s) (topq:queue->list (state-reduced s))))
 
 (define (show-step-internal n q [r '()])
   (if (> n 0)
