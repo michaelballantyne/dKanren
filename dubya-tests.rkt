@@ -169,6 +169,47 @@
   (run* (q) always (== 5 6) always)
   '())
 
+
+(test-check "fairconj3"
+            (run* (q) (fresh () (fresh () fail) always always always always
+                        always always always always
+                        always always always always
+                        always always always always
+                        always always always always
+                        always always always always
+                        always always always always
+                        always always always always
+                        always always always
+                        always always always always
+                        always always always always
+                        always always always always
+                        always always always always
+                        always always always always
+                        always always always always
+                        always always always always
+                        ))
+            '())
+
+(test-check "fairconj4"
+            (run* (q) (fresh () fail always always always always
+                        always always always always
+                        always always always always
+                        always always always always
+                        always always always always
+                        always always always always
+                        always always always always
+                        always always always always
+                        always always always
+                        always always always always
+                        always always always always
+                        always always always always
+                        always always always always
+                        always always always always
+                        always always always always
+                        always always always always
+                        ))
+            '())
+
 (test-check "allw-2"
   (run* (q) (allw fail always))
   '())

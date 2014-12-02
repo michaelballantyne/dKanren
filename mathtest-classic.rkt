@@ -313,6 +313,23 @@
     ((1 1) (0 0 0 1) (0 0 0 1 1))))
 
 
+(time (run 3 (s)
+     (fresh (b q r)
+       (logo '(0 0 1 0 0 0 1) b q r)
+       (>1o q)
+       (== `(,b ,q ,r) s))))
+
+(time (run* (b q r)
+                  (logo '(0 1) b q r)))
+
+(time (run 8 (b q r)
+                  (logo '(0 1 1) b q r)))
+
+(time (run 10 (b q r)
+                  (logo '(0 1 1 1 0 1 1 0 0 1 1 1 1 1) b q r)))
+
+#|
+
 (test-check "testc21.tex-26"
             (run* (r)
                   (logo '(0 1 1 1) '(0 1) '(1 1) r))
@@ -341,4 +358,4 @@
             (run 1 (t)
                   (expo '(1 1) '(1 0 1) t))
             (list `(1 1 0 0 1 1 1 1)))
-
+|#

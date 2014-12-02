@@ -1,6 +1,6 @@
 #lang racket
 
-(require "mk.rkt")
+(require "fairconj.rkt")
 
 (define (appendo l s out)
   (conde
