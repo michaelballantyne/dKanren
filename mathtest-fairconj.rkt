@@ -1,6 +1,7 @@
 #lang racket
 
 (require "fairconj.rkt")
+(require profile)
 
 (define (build-num n)
   (cond
@@ -279,6 +280,7 @@
     [(_ name a b)
      #'(equal? a b)]))
 
+
 (test-check "appD-1"
   (run 5 (q)
     (fresh (x y z)
@@ -304,10 +306,50 @@
     ((0 1 1) (0 0 1) (0 0 0 1 1))
     ((1 1) (0 0 0 1) (0 0 0 1 1))))
 
+
+(time (run 3 (s)
+     (fresh (b q r)
+       (logo '(0 0 1 0 0 0 1) b q r)
+       (>1o q)
+       (== `(,b ,q ,r) s))))
+
 (time (run* (b q r)
                   (logo '(0 1) b q r)))
 
+(time (run 8 (b q r)
+                  (logo '(0 1 1) b q r)))
+
+(time (run 10 (b q r)
+                  (logo '(0 1 1 1 0 1 1 0 0 1 1 1 1 1) b q r)))
+
+
 #|
+(time (run 1 (t)
+           (expo '(1 1) '(1 0 1) `(1 1 0 0 1 1 1 1))))
+
+(time (run 10 (b q r)
+                  (logo '(0 1 1 1 0 1 1 0 0 1 1 1 1 1) b q r)))
+
+(time (run 1 (t)
+           (expo '(1 1) '(1 0 1) `(1 1 0 0 1 1 1 1))))
+
+(time (run 8 (b q r)
+                  (logo '(0 1 1) b q r)))
+
+(time (run 9 (b q r)
+                  (logo '(0 1 1) b q r)))
+
+(time (run* (b q r)
+                  (logo '(0 1) b q r)))
+
+(run 1 (t)
+                  (expo '(1 1) '(1 0 1) t))
+
+
+(time (run 6 (b q r)
+                  (logo '(0 1) b q r)))
+
+
 
 (time (run 5 (b q r)
                   (logo '(0 1) b q r)))
@@ -346,3 +388,5 @@
             (list `(1 1 0 0 1 1 1 1)))
 
 |#
+
+

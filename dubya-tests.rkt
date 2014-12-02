@@ -114,16 +114,6 @@
       (allw (nullo l1) (== l2 out))))
 
 
-(define-goal (foo x)
-    (allw
-      (== 5 x)
-      (foo x)))
-
-(define-goal (bar x)
-    (allw
-      (bar x)
-      (== 5 x)))
-
 
 (define-goal (baz x)
     (anyw
@@ -135,13 +125,6 @@
       (bat x)
       (== 5 x)))
 
-
-(define-goal (quux x)
-    (allw
-      (== 5 x)
-      (allw
-        (quux x)
-        (quux x))))
 
 (define-goal (quuux x)
     (allw
@@ -233,47 +216,6 @@
   (run 1 (q)
     (bat q))
   '(5))
-
-
-
-
-(test-check "foo-1"
-  (run 1 (q)
-    (foo 6))
-  '())
-
-(test-check "foo-2"
-  (run* (q)
-    (foo 6))
-  '())
-
-
-;(test-check "bar-1"
-;  (run 1 (q)
-;    (bar 6))
-;  '())
-;
-;(test-check "bar-2"
-;  (run* (q)
-;    (bar 6))
-;  '())
-
-
-(test-check "quux-1"
-  (run* (q)
-    (quux 6))
-  '())
-
-;(test-check "quuux-1"
-;  (run* (q)
-;    (quuux 6))
-;  '())
-
-;(test-check "blat-1"
-;  (run* (q)
-;    (blat 6))
-;  '())
-
 
 (test-check "blaz-1"
   (run 1 (q)
@@ -1214,8 +1156,6 @@
         fail
         (== #t q))))
   `())
-
-
 
 
 
