@@ -38,77 +38,65 @@
       [(and disj-node (? disj?))
        (reduce-conj substitution (rest unsorted) (disjq:enqueue disj-node disjunctions))])))
 
-(define (step-state current-state)
-  (match-define (state unreduced reduced) current-state)
-  (if (pair? unreduced)
-    (match-let ([(conj substitution unsorted disjunctions) (first unreduced)])
-      (let-values ([(new-substitution new-disjunctions)
-                    (reduce-conj substitution unsorted disjunctions)])
-        (if (or (not new-disjunctions) (disjq:empty? new-disjunctions))
-          (values new-substitution (state (rest unreduced) reduced))
-          (values #f
-                  (state (rest unreduced)
-                         (topq:enqueue (conj new-substitution '() new-disjunctions)
-                                         reduced))))))
-    (match-let ([(conj substitution '() disjunctions)
-                 (topq:head reduced)])
-      (values
-        #f
-        (state
-          (map
-            (match-lambda
-              [(conj #f nested-unsorted #f)
-               (conj substitution nested-unsorted (disjq:tail disjunctions))])
-            (disj-children (disjq:head disjunctions)))
-          (topq:tail reduced))))))
-
-
-
-
-(define (topq:enqueue-all queue l)
-  (if (null? l)
-    queue
-    (topq:enqueue-all (topq:enqueue (car l) queue) (cdr l))))
+(define (distribute into-disjunction other-disjunctions substitution)
+  (map
+    (match-lambda
+      [(conj #f nested-unsorted #f)
+       (conj substitution nested-unsorted other-disjunctions)])
+    (disj-children into-disjunction)))
 
 (define (filter-branches disjunction substitution)
   (define new-children
-    (filter-map (match-lambda
-                  [(conj #f children #f)
-                   (let-values ([(new-substitution new-disjunctions)
-                                 (reduce-conj substitution children (disjq:queue))])
-                     (if new-substitution
-                       (conj #f children #f)
-                       #f))])
-                (disj-children disjunction)))
-  (if (null? new-children)
-    #f
-    (disj new-children)))
+    (filter-map
+      (match-lambda
+        [(conj #f children #f)
+         (define-values (new-substitution new-disjunctions)
+           (reduce-conj substitution children (disjq:queue)))
+         (if new-substitution
+             (conj #f children #f)
+             #f)])
+      (disj-children disjunction)))
+  (and (pair? new-children) (disj new-children)))
 
 (define (filter-disjunctions q substitution)
-  (disjq:map
-    (lambda (disjunction)
-      (filter-branches disjunction substitution))
-    q))
+  (define mapped-disjunctions
+    (disjq:map
+      (lambda (disjunction)
+        (filter-branches disjunction substitution))
+      q))
+  (and (disjq:andmap (lambda (x) x) mapped-disjunctions)
+       mapped-disjunctions))
 
-
-
-(define (step-state2 current-state)
-  (define-values (substitution disjunctions)
-    (match (topq:head current-state)
-      [(conj unreduced-substitution unreduced-unsorted unreduced-disjunctions)
-       (reduce-conj unreduced-substitution unreduced-unsorted unreduced-disjunctions)]))
-  (if (or (not substitution) (disjq:empty? disjunctions))
-    (values substitution (topq:tail current-state))
-    (values #f
-            (let ([filtered-disjunctions (filter-disjunctions disjunctions substitution)])
-              (if (not (disjq:andmap (lambda (x) x) filtered-disjunctions))
-                (topq:tail current-state)
-                (topq:enqueue-all
-                  (topq:tail current-state)
-                  (map (match-lambda
-                         [(conj #f nested-unsorted #f)
-                          (conj substitution nested-unsorted (disjq:tail filtered-disjunctions))])
-                       (disj-children (disjq:head filtered-disjunctions)))))))))
+(define (step-state current-state)
+  (match-define (state unreduced reduced) current-state)
+  (if (pair? unreduced)
+    (match-let ([(conj substitution unsorted disjunctions)
+                 (first unreduced)])
+      (define-values (new-substitution new-disjunctions)
+        (reduce-conj substitution unsorted disjunctions))
+      (define filtered-disjunctions
+        (and new-disjunctions
+             (filter-disjunctions new-disjunctions new-substitution)))
+      (cond
+        [(not filtered-disjunctions)
+         (values #f (state (rest unreduced)
+                           reduced))]
+        [(disjq:empty? filtered-disjunctions)
+         (values new-substitution
+                 (state (rest unreduced)
+                        reduced))]
+        [else
+         (values #f
+                 (state (rest unreduced)
+                        (topq:enqueue (conj new-substitution '() filtered-disjunctions)
+                                      reduced)))]))
+    (match-let ([(conj substitution '() disjunctions)
+                 (topq:head reduced)])
+      (values #f (state
+                   (distribute (disjq:head disjunctions)
+                               (disjq:tail disjunctions)
+                               substitution)
+                   (topq:tail reduced))))))
 
 
 (define (substitution->constraint-store substitution)
@@ -195,6 +183,31 @@
   (show-step-internal n (inject tree)))
 
 #|
+
+
+(define (step-state2 current-state)
+  (define-values (substitution disjunctions)
+    (match (topq:head current-state)
+      [(conj unreduced-substitution unreduced-unsorted unreduced-disjunctions)
+       (reduce-conj unreduced-substitution unreduced-unsorted unreduced-disjunctions)]))
+  (if (or (not substitution) (disjq:empty? disjunctions))
+    (values substitution (topq:tail current-state))
+    (values #f
+            (let ([filtered-disjunctions (filter-disjunctions disjunctions substitution)])
+              (if (not (disjq:andmap (lambda (x) x) filtered-disjunctions))
+                (topq:tail current-state)
+                (topq:enqueue-all
+                  (topq:tail current-state)
+                  (map (match-lambda
+                         [(conj #f nested-unsorted #f)
+                          (conj substitution nested-unsorted (disjq:tail filtered-disjunctions))])
+                       (disj-children (disjq:head filtered-disjunctions)))))))))
+
+
+(define (topq:enqueue-all queue l)
+  (if (null? l)
+    queue
+    (topq:enqueue-all (topq:enqueue (car l) queue) (cdr l))))
 
 (run* (q) (== 'a 'b))
 
