@@ -15,7 +15,7 @@
 (struct proc (name p) #:transparent)
 (struct state (unreduced reduced) #:transparent)
 
-(define (reduce-conj substitution unsorted disjunctions)
+(define (reduce-conj substitution unsorted disjunctions check-branches)
   (if (null? unsorted)
     (values substitution disjunctions)
     (match (first unsorted)
@@ -26,17 +26,28 @@
             (values #f #f)]
            [(null? (rest unsorted))
             (values new-substitution disjunctions)]
-           [else (reduce-conj new-substitution (rest unsorted) disjunctions)]))]
+           [else (reduce-conj new-substitution (rest unsorted) disjunctions check-branches)]))]
       [(conj #f nested-unsorted #f)
        (let-values ([(new-substitution new-disjunctions)
-                     (reduce-conj substitution nested-unsorted disjunctions)])
+                     (reduce-conj substitution nested-unsorted disjunctions check-branches)])
          (if new-substitution
-           (reduce-conj new-substitution (rest unsorted) new-disjunctions)
+           (reduce-conj new-substitution (rest unsorted) new-disjunctions check-branches)
            (values #f #f)))]
       [(proc name p)
-       (reduce-conj substitution (cons (p) (rest unsorted)) disjunctions)]
+       (reduce-conj substitution (cons (p) (rest unsorted)) disjunctions check-branches)]
       [(and disj-node (? disj?))
-       (reduce-conj substitution (rest unsorted) (disjq:enqueue disj-node disjunctions))])))
+       (define filtered
+         (if check-branches
+           (filter-branches disj-node substitution)
+           disj-node))
+       (if filtered
+         (reduce-conj substitution
+                      (rest unsorted)
+                      (disjq:enqueue
+                          filtered
+                          disjunctions)
+                      check-branches)
+         (values #f #f))])))
 
 (define (distribute into-disjunction other-disjunctions substitution)
   (map
@@ -51,21 +62,12 @@
       (match-lambda
         [(conj #f children #f)
          (define-values (new-substitution new-disjunctions)
-           (reduce-conj substitution children (disjq:queue)))
+           (reduce-conj substitution children (disjq:queue) #f))
          (if new-substitution
              (conj #f children #f)
              #f)])
       (disj-children disjunction)))
   (and (pair? new-children) (disj new-children)))
-
-(define (filter-disjunctions q substitution)
-  (define mapped-disjunctions
-    (disjq:map
-      (lambda (disjunction)
-        (filter-branches disjunction substitution))
-      q))
-  (and (disjq:andmap (lambda (x) x) mapped-disjunctions)
-       mapped-disjunctions))
 
 (define (step-state current-state)
   (match-define (state unreduced reduced) current-state)
@@ -73,10 +75,9 @@
     (match-let ([(conj substitution unsorted disjunctions)
                  (first unreduced)])
       (define-values (new-substitution new-disjunctions)
-        (reduce-conj substitution unsorted disjunctions))
+        (reduce-conj substitution unsorted disjunctions #t))
       (define filtered-disjunctions
-        (and new-disjunctions
-             (filter-disjunctions new-disjunctions new-substitution)))
+        new-disjunctions)
       (cond
         [(not filtered-disjunctions)
          (values #f (state (rest unreduced)
@@ -183,6 +184,17 @@
   (show-step-internal n (inject tree)))
 
 #|
+
+
+
+(define (filter-disjunctions q substitution)
+  (define mapped-disjunctions
+    (disjq:map
+      (lambda (disjunction)
+        (filter-branches disjunction substitution))
+      q))
+  (and (disjq:andmap (lambda (x) x) mapped-disjunctions)
+       mapped-disjunctions))
 
 
 (define (step-state2 current-state)
