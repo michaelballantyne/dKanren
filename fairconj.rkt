@@ -4,7 +4,7 @@
 (require (prefix-in disjq: pfds/queue/real-time))
 (require (only-in "mk.rkt" unify var reify))
 
-(provide == run run* define-goal fresh conde appendo)
+(provide == run run* fresh conde)
 
 (define (empty-s)
   '())
@@ -12,7 +12,6 @@
 (struct conj (substitution unsorted disjunctions) #:transparent)
 (struct disj (children) #:transparent)
 (struct unification (left right) #:transparent)
-(struct proc (name p) #:transparent)
 (struct state (unreduced reduced) #:transparent)
 
 (define (reduce-conj substitution unsorted disjunctions)
@@ -33,15 +32,16 @@
          (if new-substitution
            (reduce-conj new-substitution (rest unsorted) new-disjunctions)
            (values #f #f)))]
-      [(proc name p)
-       (reduce-conj substitution (cons (p) (rest unsorted)) disjunctions)]
-      [(and disj-node (? disj?))
+      ; Only disjunctions are inverse-eta delayed, so evaluate the procedure
+      ; and enqueue the resulting disjunction.
+      [(and p (? procedure?))
        (reduce-conj substitution
                     (rest unsorted)
                     (and disjunctions
                          (disjq:enqueue
-                           disj-node
-                           disjunctions)))])))
+                           (p)
+                           disjunctions)))]
+      )))
 
 (define (distribute into-disjunction other-disjunctions substitution)
   (map
@@ -117,11 +117,12 @@
 (define-syntax (conde stx)
   (syntax-case stx ()
     [(_ [g1 g1* ...] [g g* ...] ...)
-     #'(disj
-         (list
-           (conj #f (list g1 g1* ...) #f)
-           (conj #f (list g g* ...) #f)
-           ...))]))
+     #'(lambda ()
+         (disj
+           (list
+             (conj #f (list g1 g1* ...) #f)
+             (conj #f (list g g* ...) #f)
+             ...)))]))
 
 (define (== a b)
   (unification a b))
@@ -158,20 +159,7 @@
     [(_ (x x* ...) g g* ...)
      #'(run #f (x x* ...) g g* ...)]))
 
-(define-syntax (define-goal stx)
-  (syntax-case stx ()
-    [(_ (name args ...) body)
-     #'(define (name args ...)
-         (proc name (lambda ()
-           body)))]))
-
-(define-goal (appendo l s out)
-  (conde
-    [(== '() l) (== s out)]
-    [(fresh (a d res)
-       (== `(,a . ,d) l)
-       (== `(,a . ,res) out)
-       (appendo d s res))]))
+;; Debugging tools
 
 (define (state-display s)
   (list (state-unreduced s) (topq:queue->list (state-reduced s))))
@@ -184,81 +172,5 @@
 
 (define (show-step n tree)
   (show-step-internal n (inject tree)))
-
-#|
-
-
-
-(define (filter-disjunctions q substitution)
-  (define mapped-disjunctions
-    (disjq:map
-      (lambda (disjunction)
-        (filter-branches disjunction substitution))
-      q))
-  (and (disjq:andmap (lambda (x) x) mapped-disjunctions)
-       mapped-disjunctions))
-
-
-(define (step-state2 current-state)
-  (define-values (substitution disjunctions)
-    (match (topq:head current-state)
-      [(conj unreduced-substitution unreduced-unsorted unreduced-disjunctions)
-       (reduce-conj unreduced-substitution unreduced-unsorted unreduced-disjunctions)]))
-  (if (or (not substitution) (disjq:empty? disjunctions))
-    (values substitution (topq:tail current-state))
-    (values #f
-            (let ([filtered-disjunctions (filter-disjunctions disjunctions substitution)])
-              (if (not (disjq:andmap (lambda (x) x) filtered-disjunctions))
-                (topq:tail current-state)
-                (topq:enqueue-all
-                  (topq:tail current-state)
-                  (map (match-lambda
-                         [(conj #f nested-unsorted #f)
-                          (conj substitution nested-unsorted (disjq:tail filtered-disjunctions))])
-                       (disj-children (disjq:head filtered-disjunctions)))))))))
-
-
-(define (topq:enqueue-all queue l)
-  (if (null? l)
-    queue
-    (topq:enqueue-all (topq:enqueue (car l) queue) (cdr l))))
-
-(run* (q) (== 'a 'b))
-
-(run* (q) (== 'a 'a))
-
-(run* (q) (fresh ()
-            (== 'a 'b)
-            (== 'a 'a)))
-
-(run* (q) (conde
-            [(== 'a q)]
-            [(== 'b q)]))
-
-(run* (q) (conde
-            [(== 'a 'b)
-             (== 'a q)]
-            [(== 'b q)]))
-
-(run* (q) (appendo '(a b) '(c d) q))
-
-(define-goal (valueo x v)
-  (fresh ()
-    (== x v)
-    (conde
-      [(== 'a 'a)]
-      [(valueo x v)])))
-
-(run* (q) (fresh ()
-            (valueo q 1)
-            (valueo q 2)))
-
-(run 10 (q) (fresh ()
-            (valueo q 1)
-            (valueo q 1)))
-
-(run* (x y z) (appendo `(a . ,x) y `(b . ,z)))
-
-|#
 
 

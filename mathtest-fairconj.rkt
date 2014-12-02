@@ -3,6 +3,14 @@
 (require "fairconj.rkt")
 (require profile)
 
+(define (appendo l s out)
+  (conde
+    [(== '() l) (== s out)]
+    [(fresh (a d res)
+       (== `(,a . ,d) l)
+       (== `(,a . ,res) out)
+       (appendo d s res))]))
+
 (define (build-num n)
   (cond
       ((odd? n)
@@ -35,7 +43,7 @@
       ((== 0 b) (== 1 x) (== 1 y) (== 0 r) (== 1 c))
       ((== 1 b) (== 1 x) (== 1 y) (== 1 r) (== 1 c))))
 
-(define-goal (addero d n m r)
+(define (addero d n m r)
   (conde
       ((== 0 d) (== '() m) (== n r))
       ((== 0 d) (== '() n) (== m r)
@@ -67,7 +75,7 @@
 (define (minuso n m k)
   (pluso m k n))
 
-(define-goal (*o n m p)
+(define (*o n m p)
   (conde
       ((== '() n) (== '() p))
       ((poso n) (== '() m) (== '() p))
@@ -93,7 +101,7 @@
       (*o x m q)
       (pluso `(0 . ,q) m p)))
 
-(define-goal (bound-*o q p n m)
+(define (bound-*o q p n m)
   (conde
       ((== '() q) (poso p))
       ((fresh (a0 a1 a2 a3 x y z)
@@ -107,7 +115,7 @@
             (bound-*o x y z m)))))))
 
 
-(define-goal (=lo n m)
+(define (=lo n m)
   (conde
       ((== '() n) (== '() m))
       ((== '(1) n) (== '(1) m))
@@ -116,7 +124,7 @@
          (== `(,b . ,y) m) (poso y)
          (=lo x y)))))
 
-(define-goal (<lo n m)
+(define (<lo n m)
   (conde
       ((== '() n) (poso m))
       ((== '(1) n) (>1o m))
@@ -143,7 +151,7 @@
       ((== n m))
       ((<o n m))))
 
-(define-goal (/o n m q r)
+(define (/o n m q r)
   (conde
       ((== r n) (== '() q) (<o n m))
       ((== '(1) q) (=lo n m) (pluso r m n)
@@ -166,7 +174,7 @@
             (splito rr r '() rh)
             (/o nh m qh rh)))))))
 
-(define-goal (splito n r l h)
+(define (splito n r l h)
   (conde
       ((== '() n) (== '() h) (== '() l))
       ((fresh (b n^)
@@ -241,7 +249,7 @@
              (pluso bq r n)
              (<o n bq1)))))))
 
-(define-goal (exp2 n b q)
+(define (exp2 n b q)
    (conde
        ((== '(1) n) (== '() q))
        ((>1o n) (== '(1) q)
@@ -261,7 +269,7 @@
           (appendo b `(1 . ,b) b2)
           (exp2 nh b2 q1)))))
 
-(define-goal (repeated-mul n q nq)
+(define (repeated-mul n q nq)
   (conde
       ((poso n) (== '() q) (== '(1) nq))
       ((== '(1) q) (== n nq))
