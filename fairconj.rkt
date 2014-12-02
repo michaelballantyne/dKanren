@@ -15,39 +15,48 @@
 (struct proc (name p) #:transparent)
 (struct state (unreduced reduced) #:transparent)
 
-(define (reduce-conj substitution unsorted disjunctions check-branches)
-  (if (null? unsorted)
-    (values substitution disjunctions)
-    (match (first unsorted)
-      [(unification term1 term2)
-       (let ([new-substitution (unify term1 term2 substitution)])
-         (cond
-           [(not new-substitution)
-            (values #f #f)]
-           [(null? (rest unsorted))
-            (values new-substitution disjunctions)]
-           [else (reduce-conj new-substitution (rest unsorted) disjunctions check-branches)]))]
-      [(conj #f nested-unsorted #f)
-       (let-values ([(new-substitution new-disjunctions)
-                     (reduce-conj substitution nested-unsorted disjunctions check-branches)])
-         (if new-substitution
-           (reduce-conj new-substitution (rest unsorted) new-disjunctions check-branches)
-           (values #f #f)))]
-      [(proc name p)
-       (reduce-conj substitution (cons (p) (rest unsorted)) disjunctions check-branches)]
-      [(and disj-node (? disj?))
-       (define filtered
-         (if check-branches
-           (filter-branches disj-node substitution)
-           disj-node))
-       (if filtered
-         (reduce-conj substitution
-                      (rest unsorted)
-                      (disjq:enqueue
-                          filtered
-                          disjunctions)
-                      check-branches)
-         (values #f #f))])))
+(define (reduce-conj substitution unsorted disjunctions check-branches unchecked-disj)
+  (cond
+    [(pair? unsorted)
+     (match (first unsorted)
+       [(unification term1 term2)
+        (let ([new-substitution (unify term1 term2 substitution)])
+          (cond
+            [(not new-substitution)
+             (values #f #f)]
+            [(and (null? (rest unsorted))
+             (disjq:empty? unchecked-disj))
+             (values new-substitution disjunctions)]
+            [else (reduce-conj new-substitution (rest unsorted) disjunctions check-branches unchecked-disj)]))]
+       [(conj #f nested-unsorted #f)
+        (let-values ([(new-substitution new-disjunctions)
+                      (reduce-conj substitution nested-unsorted disjunctions check-branches unchecked-disj)])
+          (if new-substitution
+            (reduce-conj new-substitution (rest unsorted) new-disjunctions check-branches unchecked-disj)
+            (values #f #f)))]
+       [(proc name p)
+        (reduce-conj substitution (cons (p) (rest unsorted)) disjunctions check-branches unchecked-disj)]
+       [(and disj-node (? disj?))
+        (reduce-conj substitution
+                     (rest unsorted)
+                     disjunctions
+                     check-branches
+                     (disjq:enqueue
+                       disj-node
+                       unchecked-disj))])]
+    [(not (disjq:empty? unchecked-disj))
+      (define filtered
+        (if check-branches
+          (filter-branches (disjq:head unchecked-disj) substitution)
+          (disjq:head unchecked-disj)))
+      (if filtered
+        (reduce-conj substitution
+                     '()
+                     (disjq:enqueue filtered disjunctions)
+                     check-branches
+                     (disjq:tail unchecked-disj))
+        (values #f #f))]
+    [else (values substitution disjunctions)]))
 
 (define (distribute into-disjunction other-disjunctions substitution)
   (map
@@ -62,10 +71,8 @@
       (match-lambda
         [(conj #f children #f)
          (define-values (new-substitution new-disjunctions)
-           (reduce-conj substitution children (disjq:queue) #f))
-         (if new-substitution
-             (conj #f children #f)
-             #f)])
+           (reduce-conj substitution children (disjq:queue) #f (disjq:queue)))
+         (and new-substitution (conj #f children #f))])
       (disj-children disjunction)))
   (and (pair? new-children) (disj new-children)))
 
@@ -75,22 +82,14 @@
     (match-let ([(conj substitution unsorted disjunctions)
                  (first unreduced)])
       (define-values (new-substitution new-disjunctions)
-        (reduce-conj substitution unsorted disjunctions #t))
-      (define filtered-disjunctions
-        new-disjunctions)
-      (cond
-        [(not filtered-disjunctions)
-         (values #f (state (rest unreduced)
-                           reduced))]
-        [(disjq:empty? filtered-disjunctions)
-         (values new-substitution
-                 (state (rest unreduced)
-                        reduced))]
-        [else
-         (values #f
-                 (state (rest unreduced)
-                        (topq:enqueue (conj new-substitution '() filtered-disjunctions)
-                                      reduced)))]))
+        (reduce-conj substitution unsorted disjunctions #t (disjq:queue)))
+      (if (or (not new-disjunctions) (disjq:empty? new-disjunctions))
+        (values new-substitution (state (rest unreduced)
+                                        reduced))
+        (values #f
+                (state (rest unreduced)
+                       (topq:enqueue (conj new-substitution '() new-disjunctions)
+                                     reduced)))))
     (match-let ([(conj substitution '() disjunctions)
                  (topq:head reduced)])
       (values #f (state
