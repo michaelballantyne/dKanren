@@ -2,9 +2,14 @@
 
 (require (prefix-in topq: pfds/queue/real-time))
 (require (prefix-in disjq: pfds/queue/real-time))
-(require (only-in "mk.rkt" unify var reify))
+(require (rename-in (only-in "mk.rkt" var reify == symbolo numbero absento =/=)
+                    [== ==-goal]
+                    [symbolo symbolo-goal]
+                    [numbero numbero-goal]
+                    [absento absento-goal]
+                    [=/= =/=-goal]))
 
-(provide == run run* fresh conde)
+(provide == run run* fresh conde symbolo numbero absento =/=)
 
 
 ; Constraints
@@ -14,18 +19,21 @@
 
 (struct unification (term1 term2) #:transparent)
 
-(define (== term1 term2)
-  (constraint (unification term1 term2)))
+(define-syntax-rule (wrap-constraints [(name args ...) goal] ...)
+  (begin
+    (define (name args ...)
+      (constraint (goal args ...)))
+    ...))
 
+(wrap-constraints
+  [(== term1 term2) ==-goal]
+  [(symbolo u) symbolo-goal]
+  [(numbero u) numbero-goal]
+  [(absento u v) absento-goal]
+  [(=/= u v) =/=-goal])
 
 (define (apply-constraint constraint constraint-store)
-  (match-define (list a b substitution c d e f) constraint-store)
-  (match constraint
-    [(unification term1 term2)
-     (let ([new-substitution (unify term1 term2 substitution)])
-       (and new-substitution (list a b new-substitution c d e f)))]
-    ))
-
+  (constraint constraint-store))
 
 ; Search
 

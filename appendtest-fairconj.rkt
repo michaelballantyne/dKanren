@@ -1,6 +1,7 @@
 #lang racket
 
 (require "fairconj.rkt")
+(require feature-profile)
 
 (define (appendo l s out)
   (conde
@@ -10,5 +11,5 @@
        (== `(,a . ,res) out)
        (appendo d s res))]))
 
-(time (length (run* (q) (fresh (x y) (appendo x y (make-list 1000 1)) (== (list x y) q)))))
+(feature-profile (length (run* (q) (fresh (x y) (appendo x y (make-list 1000 1)) (== (list x y) q)))))
 
