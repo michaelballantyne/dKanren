@@ -423,7 +423,7 @@
     (cond
       (((find-dup same-var? S) Y) =>
        (lambda (y)
-         `(,B E ,S ,D ,(remq1 y Y) ,N ,T)))
+         `(,B ,E ,S ,D ,(remq1 y Y) ,N ,T)))
       (else c))))
 
 (define var-type-mismatch?
@@ -749,7 +749,7 @@
                                   (or
                                     (anyvar? dw R)
                                     (anyeigen? dw R))))
-                               (rem-xx-from-d D S))))
+                               (rem-xx-from-d c))))
                       (rem-subsumed D)) 
                     (remp
                      (lambda (y) (var? (walk y R)))
@@ -842,15 +842,18 @@
             (subsumed? d (cdr d*))))))))
 
 (define rem-xx-from-d
-  (lambda (D S)
-    (remp not
-          (map (lambda (d)
-                 (cond
-                   ((unify* d S) =>
-                    (lambda (S0)
-                      (prefix-S S0 S)))
-                   (else #f)))
-               D))))
+  (lambdag@ (c : B E S D Y N T)
+    (let ((D (walk* D S)))
+      (remp not
+            (map (lambda (d)
+                   (cond
+                     ((unify* d S) =>
+                      (lambda (S0)
+                        (cond
+                          ((==fail-check B E S0 '() Y N T) #f)
+                          (else (prefix-S S0 S)))))
+                     (else #f)))
+                 D)))))
 
 (define rem-subsumed-T 
   (lambda (T)
